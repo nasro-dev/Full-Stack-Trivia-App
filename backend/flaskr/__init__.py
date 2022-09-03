@@ -163,18 +163,17 @@ def create_app(test_config=None):
     """
     @app.route('/categories/<int:cat_id>/questions', methods=['GET'])
     def get_question_by_category(cat_id):
-        category = Category.query.filter_by(id = cat_id).one_or_none()
-        try:
-            questions = Question.query.filter_by(category = category.id ).all()
-            question_list = paginate_questions(request, questions) 
-            return jsonify({
-                "success":True,
-                "questions":question_list,
-                "totalQuestions":len(question_list),
-                "currentCategory":category.type
-            })    
-        except:
-            abort(404)   
+            questions =[qts.format() for qts in Question.query.filter(Question.category==cat_id).all()]
+            if questions :
+                question_list = paginate_questions(request, questions) 
+                return jsonify({
+                    "success":True,
+                    "questions":question_list,
+                    "totalQuestions":len(question_list),
+                    "currentCategory":Category.query.filter_by(id = cat_id).one_or_none()
+                })   
+            else:     
+                abort(404)   
         
     """
     @TODO:
@@ -189,34 +188,34 @@ def create_app(test_config=None):
     """
     @app.route('/quizzes',methods=['POST'])
     def get_quiz_questions():
-        try:
-            body = request.get_json()
-            previous_questions = body.get('previous_questions')
-            questions = Question.query.all()
-            quiz_category = body.get('quiz.category')
+            prev_questions = request.get_json().get('previous_questions')
+            quiz_category = request.get_json().get('quiz.category')
 
-            if(len(previous_questions) == len(questions)):
-                return jsonify({
-                    'success': True,
-                    'message': 'game over'
-                }), 200
-            if quiz_category:
-                result = Question.query.filter_by(category=quiz_category['id']).filter(Question.id.notin_(previous_questions)).all()
+            if prev_questions is None or quiz_category is None:
+                abort(400)
             else:
-                result = Question.query.filter(Question.id.notin_(previous_questions)).all()        
-            next_question = random.choice(result)
-            while next_question.id in previous_questions:
-                return jsonify({
-                    'success': True,
-                    'message':'game over'
-                }), 200    
-            while next_question.id not in previous_questions:
-                return jsonify({
-                    'success':True,
-                    'question': next_question.format()
-                })
-        except:
-            abort(400)  
+                if(len(prev_questions) == len(Question.query.all())):
+                    return jsonify({
+                        'success': True,
+                        'message': 'the quizze is completed, there is no more question'
+                    }), 200
+                else:
+                    if quiz_category:
+                        result = [qts.format() for qts in Question.query.filter(category==quiz_category['id']).all()]
+                    else:
+                        result = [qts.format() for qts in Question.query.all()]        
+                    chosen_question = random.choice(result)
+                    while chosen_question.id :
+                        if chosen_question.id not in prev_questions:
+                                return jsonify({
+                                    'success':True,
+                                    'question': chosen_question.format()
+                                })
+                        else:
+                                return jsonify({
+                                    'success': True,
+                                    'message': None
+                                }), 200   
     """
     @TODO:
     Create error handlers for all expected errors
