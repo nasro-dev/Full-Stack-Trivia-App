@@ -1,4 +1,5 @@
 import os
+from unicodedata import category
 from flask import Flask, request, abort, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
@@ -71,13 +72,13 @@ def create_app(test_config=None):
         current_qts = paginate_questions(request,select_qts)
         
         categories = Category.query.all()
-        format_cat ={ category.format()["id"]: category.format()["type"]  for category in categories }
+        format_cat = { category.format()["id"]: category.format()["type"]  for category in categories }
 
         if len(current_qts)==0 or len(format_cat) == 0 :
             abort(404)
         return jsonify({
             'success': True,
-            'questions':current_qts,
+            'questions': current_qts,
             'totalQuestions':len(current_qts),
             'categories':format_cat,
             'currentCategory': None
@@ -94,17 +95,16 @@ def create_app(test_config=None):
     """
     @app.route('/questions/<int:qts_id>' ,methods=['DELETE'])
     def delete_question(qts_id):
-        try:
             question = Question.query.filter( Question.id == qts_id).one_or_none()
-            if question is None:
-                abort(404)
-            question.delete()    
-            return jsonify({
+            if question is not None: 
+              question.delete()    
+              return jsonify({
                 "success": True,
                 "message": f"Question with id:{qts_id} is deleted"
-            })
-        except:
-            abort(422)   
+            }),200
+            else:
+                abort(404)
+        
     """
     @TODO:
     Create an endpoint to POST a new question,
@@ -163,14 +163,15 @@ def create_app(test_config=None):
     """
     @app.route('/categories/<int:cat_id>/questions', methods=['GET'])
     def get_question_by_category(cat_id):
-            questions =[qts.format() for qts in Question.query.filter(Question.category==cat_id).all()]
-            if questions :
-                question_list = paginate_questions(request, questions) 
+            questions =[qts.format() for qts in Question.query.order_by(Question.id).filter(Question.category==cat_id)]
+            current_category = Category.query.filter(Category.id == cat_id).first()
+
+            if current_category is not None:
                 return jsonify({
                     "success":True,
-                    "questions":question_list,
-                    "totalQuestions":len(question_list),
-                    "currentCategory":Category.query.filter_by(id = cat_id).one_or_none()
+                    "questions":questions,
+                    "totalQuestions":len(questions),
+                    "currentCategory":current_category.type
                 })   
             else:     
                 abort(404)   
@@ -188,29 +189,26 @@ def create_app(test_config=None):
     """
     @app.route('/quizzes',methods=['POST'])
     def get_quiz_questions():
-            prev_questions = request.get_json().get('previous_questions')
-            quiz_category = request.get_json().get('quiz.category')
-
-            if prev_questions is None or quiz_category is None:
-                abort(400)
-            else:
-                if(len(prev_questions) == len(Question.query.all())):
+            body = request.get_json()
+            prev_questions = body.get("previous_questions")
+            quiz_category = body.get("quiz_category")
+            if(len(prev_questions) == len(Question.query.all())):
                     return jsonify({
                         'success': True,
                         'message': 'the quizze is completed, there is no more question'
                     }), 200
-                else:
-                    if quiz_category:
-                        result = [qts.format() for qts in Question.query.filter(category==quiz_category['id']).all()]
-                    else:
-                        result = [qts.format() for qts in Question.query.all()]        
-                    chosen_question = random.choice(result)
-                    while chosen_question.id :
+                
+            if quiz_category['id'] == 0:
+                        result = Question.query.filter(Question.id.notin_(prev_questions)).all()
+            else:
+                        result = Question.query.filter_by(category=quiz_category['id']).filter(Question.id.notin_(prev_questions)).all()                
+            chosen_question = random.choice(result)
+            while True :
                         if chosen_question.id not in prev_questions:
                                 return jsonify({
                                     'success':True,
                                     'question': chosen_question.format()
-                                })
+                                }),200
                         else:
                                 return jsonify({
                                     'success': True,
